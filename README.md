@@ -29,8 +29,7 @@ uv run time-narrator --write-default-config
 
 This will create a new file at `~/.config/time-narrator/config.toml`.
 
-
-
+### Options
 - `tts_command`: The shell command used to speak text. The script pipes the narration text to this command's standard input.
   - Example #1: `tts_command = "espeak-ng"`
   - Example #2 (higher quality): `tts_command = "piper --model /path/to/en_US-lessac-medium.onnx --output-file - | pw-play"`
