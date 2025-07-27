@@ -23,12 +23,12 @@ import sys
 import time
 from collections import Counter
 
-from .config import APP_CONFIG, write_default_config
+from .config import load_config, write_default_config
 from .idle_tracker import IdleTracker
 from .sway_tracker import close_sway_connection, get_focused_window_title
 
 
-def narrate(text: str):
+def narrate(text: str, tts_command: str):
     """
     Uses the configured TTS command to speak the given text by piping it to the command's stdin.
     """
@@ -36,14 +36,14 @@ def narrate(text: str):
         # Use shell=True to allow for command pipelines (e.g., piper | aplay).
         # The text to be spoken is passed to the command's standard input.
         subprocess.run(
-            APP_CONFIG.tts_command,
+            tts_command,
             input=text,
             shell=True,
             check=True,
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        print(f"Error executing TTS command: '{APP_CONFIG.tts_command}'")
+        print(f"Error executing TTS command: '{tts_command}'")
         print(f"Return code: {e.returncode}")
 
     except Exception as e:
@@ -69,18 +69,21 @@ def main():
     )
     args = parser.parse_args()
 
+    # Load the initial configuration
+    app_config = load_config()
+
     if args.write_default_config:
         print("Writing default configuration file...")
         write_default_config()
         sys.exit(0)
 
     if args.tts_command:
-        APP_CONFIG.tts_command = args.tts_command
+        app_config.tts_command = args.tts_command
 
     print("Time Narrator starting up...")
-    print(f"Loaded configuration: {APP_CONFIG}")
+    print(f"Loaded configuration: {app_config}")
 
-    idle_tracker = IdleTracker(idle_threshold_sec=APP_CONFIG.idle_threshold_sec)
+    idle_tracker = IdleTracker(idle_threshold_sec=app_config.idle_threshold_sec)
     idle_tracker.start()
 
     # Give the idle tracker a moment to initialize and check if it's running
@@ -98,22 +101,47 @@ def main():
     idle_tick_counter = 0
     last_reminder_time = None  # The time the last reminder was given.
 
-    def schedule_next_reminder() -> float:
+    def schedule_next_reminder(config) -> float:
         """Calculates the absolute timestamp for the next reminder."""
-        delay = APP_CONFIG.base_interval_sec + random.randint(
-            -APP_CONFIG.random_window_sec, APP_CONFIG.random_window_sec
+        delay = config.base_interval_sec + random.randint(
+            -config.random_window_sec, config.random_window_sec
         )
         print(f"INFO: Next reminder in {delay // 60} minutes and {delay % 60} seconds.")
         return time.time() + delay
 
     next_reminder_time = 0  # Set to 0 to trigger the first reminder immediately.
-    last_narration_time = 0.0
 
     try:
         while True:
             time.sleep(TICK_INTERVAL_SEC)
 
-            # 1. Track activity or idle state
+            # 1. Reload config and handle changes
+            new_config = load_config()
+
+            # Re-apply command-line override if it exists
+            if args.tts_command:
+                new_config.tts_command = args.tts_command
+
+            # If the idle threshold has changed, restart the tracker.
+            if new_config.idle_threshold_sec != app_config.idle_threshold_sec:
+                print("INFO: Idle threshold changed. Restarting idle tracker...")
+                idle_tracker.stop()
+                idle_tracker.join()
+                idle_tracker = IdleTracker(
+                    idle_threshold_sec=new_config.idle_threshold_sec
+                )
+                idle_tracker.start()
+                time.sleep(1)  # Give it a moment to stabilize
+                if not idle_tracker.is_alive():
+                    print(
+                        "Error: Idle tracker thread failed to restart after config change. Exiting."
+                    )
+                    sys.exit(1)
+
+            # Update the application's config state
+            app_config = new_config
+
+            # 2. Track activity or idle state
             if idle_tracker.is_user_idle():
                 idle_tick_counter += 1
             else:
@@ -121,13 +149,13 @@ def main():
                 if title:  # Only log if there is a window title
                     activity_log.append(title)
 
-            # 2. Check if it's time for a reminder
+            # 3. Check if it's time for a reminder
             if time.time() >= next_reminder_time:
                 time_now = time.time()
 
                 # Announce the time first
                 current_time_str = time.strftime("%I:%M %p")
-                narrate(f"The time is {current_time_str}.")
+                narrate(f"The time is {current_time_str}.", app_config.tts_command)
                 time.sleep(0.2)  # Small pause for clarity
 
                 # Determine the most significant activity since the last reminder
@@ -157,15 +185,19 @@ def main():
                             if duration_min == 1:
                                 duration_message = "In the past minute, "
                             else:
-                                duration_message = f"In the past {duration_min} minutes, "
+                                duration_message = (
+                                    f"In the past {duration_min} minutes, "
+                                )
 
-                    narrate(f"{duration_message}{activity_summary}")
+                    narrate(
+                        f"{duration_message}{activity_summary}", app_config.tts_command
+                    )
 
-                # 3. Reset state for the next interval
+                # 4. Reset state for the next interval
                 activity_log.clear()
                 idle_tick_counter = 0
                 last_reminder_time = time_now
-                next_reminder_time = schedule_next_reminder()
+                next_reminder_time = schedule_next_reminder(app_config)
 
     except KeyboardInterrupt:
         print("\nCaught interrupt signal. Shutting down...")

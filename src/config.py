@@ -18,16 +18,26 @@ import os
 import tomllib
 from pathlib import Path
 
-@dataclasses.dataclass(frozen=True)
+# The default configuration values, used as a fallback.
+DEFAULT_CONFIG_VALUES = {
+    "tts_command": "espeak-ng",
+    "base_interval_sec": 600,
+    "random_window_sec": 300,
+    "idle_threshold_sec": 60,
+}
+
+
+@dataclasses.dataclass
 class Config:
     """
     Holds the application configuration.
-    Using a frozen dataclass makes the configuration immutable, which is a good practice.
+    This object is mutable, allowing its values to be updated during runtime.
     """
     tts_command: str
     base_interval_sec: int
     random_window_sec: int
     idle_threshold_sec: int
+
 
 def _get_config_path() -> Path:
     """
@@ -42,6 +52,7 @@ def _get_config_path() -> Path:
     # Otherwise, default to ~/.config
     return Path.home() / ".config" / "time-narrator" / "config.toml"
 
+
 def load_config() -> Config:
     """
     Loads configuration by reading the user's config file and merging it
@@ -49,13 +60,8 @@ def load_config() -> Config:
 
     If the config file is not found or is invalid, defaults will be used.
     """
-    # Start with the default configuration values
-    config_values = {
-        "tts_command": "espeak-ng",
-        "base_interval_sec": 600,
-        "random_window_sec": 300,
-        "idle_threshold_sec": 60,
-    }
+    # Start with a copy of the default configuration values
+    config_values = DEFAULT_CONFIG_VALUES.copy()
 
     config_path = _get_config_path()
 
@@ -81,6 +87,7 @@ def load_config() -> Config:
 
     return Config(**config_values)
 
+
 def write_default_config():
     """
     Writes the default configuration to the user's config file path.
@@ -101,16 +108,16 @@ def write_default_config():
 # This example uses a shell pipe, which is supported.
 # tts_command = "bash -c 'piper --model /path/to/model.onnx --output-file - | pw-play -'"
 
-tts_command = "{APP_CONFIG.tts_command}"
+tts_command = "{DEFAULT_CONFIG_VALUES['tts_command']}"
 
 # Reminder interval in seconds (e.g., 20 minutes)
-base_interval_sec = {APP_CONFIG.base_interval_sec}
+base_interval_sec = {DEFAULT_CONFIG_VALUES['base_interval_sec']}
 
 # Randomness window in seconds (e.g., +/- 5 minutes)
-random_window_sec = {APP_CONFIG.random_window_sec}
+random_window_sec = {DEFAULT_CONFIG_VALUES['random_window_sec']}
 
 # Seconds of inactivity to be considered "idle"
-idle_threshold_sec = {APP_CONFIG.idle_threshold_sec}
+idle_threshold_sec = {DEFAULT_CONFIG_VALUES['idle_threshold_sec']}
 """
 
     try:
@@ -120,6 +127,7 @@ idle_threshold_sec = {APP_CONFIG.idle_threshold_sec}
     except (IOError, OSError) as e:
         print(f"Error: Could not write to config file at {config_path}.")
         print(f"Details: {e}")
+
 
 # Create a single, project-wide instance of the configuration.
 # Other modules can import this instance directly.
