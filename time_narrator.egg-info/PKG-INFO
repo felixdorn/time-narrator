@@ -1,0 +1,141 @@
+Metadata-Version: 2.4
+Name: time-narrator
+Version: 0.1.0
+Summary: A background service that periodically narrates the time and your activity on Sway.
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Topic :: Desktop Environment
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: i3ipc>=2.2.1
+Requires-Dist: piper>=0.14.4
+Requires-Dist: pywayland>=0.4.18
+
+# Time Narrator
+
+A background service that periodically tells you the time and what you've been working on.
+
+## About
+
+This tool runs on Sway (Linux) and uses text-to-speech to provide ambient updates about the current time and your most recent activity (based on the active window title). It's designed to help you keep track of time without constantly checking the clock.
+
+## Installation
+
+This project is managed with `uv` and `pyproject.toml`.
+
+### 1. Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+*   **Sway**: The Wayland compositor this tool is designed for.
+*   **Python**: Version 3.8 or newer.
+*   **uv**: The Python package installer. ([Installation guide](https://astral.sh/docs/uv#installation)).
+*   **A Text-to-Speech (TTS) engine**: A command-line TTS tool like `espeak-ng` or `piper-tts`.
+*   **pywayland-scanner**: This tool is required to generate protocol bindings. It's often included with `pywayland`.
+
+### 2. Generate Wayland Protocol Bindings
+
+This application uses a Wayland protocol that is not yet standard. You must manually generate the Python bindings for it.
+
+**Step 1: Get the protocol XML file**
+```sh
+curl -o ext-idle-notify-v1.xml https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/main/staging/ext-idle-notify/ext-idle-notify-v1.xml
+```
+
+**Step 2: Generate the Python file**
+Move the generated file into the `src` directory. The output filename is important, as the code imports it directly.
+```sh
+pywayland-scanner -i ext-idle-notify-v1.xml -o src/ext_idle_notify_v1_protocol.py
+```
+
+### 3. Install the Application
+
+```sh
+uv sync
+```
+
+## Configuration
+
+The application is configured via `~/.config/time-narrator/config.toml`. You will need to create this directory and file.
+
+Example `~/.config/time-narrator/config.toml`:
+
+```toml
+# The command to execute for text-to-speech.
+# This example uses a shell pipe, which is supported.
+# tts_command = "piper --model en_US-lessac-medium.onnx --output_file - | aplay -r 22050 -f S16_LE -t raw -"
+
+# A simpler example using espeak-ng:
+tts_command = "espeak-ng"
+
+# Reminder interval in seconds (20 minutes)
+base_interval_sec = 1200
+
+# Randomness window in seconds (+/- 5 minutes)
+random_window_sec = 300
+
+# Seconds of inactivity to be considered "idle"
+idle_threshold_sec = 60
+```
+
+## Usage
+
+### Running Manually
+
+For testing, you can run the application directly from your terminal after activating the virtual environment:
+
+```sh
+time-narrator
+```
+Press `Ctrl+C` to stop it.
+
+### Running as a Systemd Service (Recommended)
+
+To run the application automatically in the background on login, create a systemd user service.
+
+**Step 1: Create the service file**
+
+Create the file `~/.config/systemd/user/time-narrator.service`.
+
+**Important:** You must replace `/path/to/your/project` with the absolute path to this project's directory.
+
+```ini
+[Unit]
+Description=Time Narrator Service
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Path to the executable within the virtual environment
+ExecStart=/path/to/your/project/.venv/bin/time-narrator
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+**Step 2: Enable and start the service**
+
+```sh
+# Reload systemd to recognize the new service
+systemctl --user daemon-reload
+
+# Enable the service to start on login
+systemctl --user enable time-narrator.service
+
+# Start the service immediately
+systemctl --user start time-narrator.service
+```
+
+You can check its status or logs with:
+```sh
+systemctl --user status time-narrator
+journalctl --user -u time-narrator -f
+```
+
+## Project Specification
+
+For detailed information on the design and how it works, see `SPEC.md`.

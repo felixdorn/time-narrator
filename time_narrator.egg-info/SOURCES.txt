@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/__main__.py
+src/config.py
+src/idle_tracker.py
+src/sway_tracker.py
+time_narrator.egg-info/PKG-INFO
+time_narrator.egg-info/SOURCES.txt
+time_narrator.egg-info/dependency_links.txt
+time_narrator.egg-info/entry_points.txt
+time_narrator.egg-info/requires.txt
+time_narrator.egg-info/top_level.txt

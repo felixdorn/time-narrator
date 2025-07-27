@@ -1,0 +1,2 @@
+[console_scripts]
+time-narrator = src.__main__:main
